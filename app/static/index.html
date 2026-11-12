@@ -34,6 +34,7 @@ td.n{text-align:right;white-space:nowrap}.neg{color:#c0392b}.pos{color:#1e8e5a}
     <button class="p" id="import">Importar CSV</button>
     <input type="file" id="file" accept=".csv,text/csv" hidden>
     <button class="p" id="connect" hidden>Conectar banco</button>
+    <button class="p" id="mlconnect" hidden>Conectar Mercado Livre</button>
     <button id="sync" hidden>Sincronizar</button>
   </div>
 </header>
@@ -77,9 +78,14 @@ $('month').onchange=load;
 $('import').onclick=()=>$('file').click();
 $('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;msg('Importando…');
   try{const r=await api('/api/import',{method:'POST',headers:{'Content-Type':'text/plain'},body:await f.text()});msg(`${r.imported} transações importadas.`);load()}catch(x){msg('Erro: '+x.message)}e.target.value=''};
-api('/api/config').then(c=>{$('connect').hidden=!c.pluggy;$('sync').hidden=!c.pluggy});
+api('/api/config').then(c=>{CFG=c;$('connect').hidden=!c.pluggy;$('mlconnect').hidden=!c.ml_available||c.ml_connected;$('sync').hidden=!(c.pluggy||c.ml_connected)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
-$('sync').onclick=async()=>{msg('Sincronizando…');try{const r=await api('/api/sync',{method:'POST'});msg(`${r.synced} transações sincronizadas.`);load()}catch(e){msg('Erro: '+e.message)}};
+let CFG={};
+$('sync').onclick=async()=>{msg('Sincronizando…');try{let t='';
+  if(CFG.pluggy){const r=await api('/api/sync',{method:'POST'});t+=`${r.synced} transações. `}
+  if(CFG.ml_connected){const r=await api('/api/ml/sync',{method:'POST'});t+=`${r.orders} compras do ML (${r.matched} ligadas à fatura).`}
+  msg(t);load()}catch(e){msg('Erro: '+e.message)}};
+$('mlconnect').onclick=async()=>{try{location=(await api('/api/ml/login')).url}catch(e){msg('Erro: '+e.message)}};
 $('connect').onclick=async()=>{
   try{
     const {accessToken}=await api('/api/connect-token',{method:'POST'});

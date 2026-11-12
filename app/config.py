@@ -19,3 +19,8 @@ PLUGGY_CLIENT_ID = os.getenv("PLUGGY_CLIENT_ID", "")
 PLUGGY_CLIENT_SECRET = os.getenv("PLUGGY_CLIENT_SECRET", "")
 PLUGGY_BASE_URL = "https://api.pluggy.ai"
 DB_PATH = os.getenv("FINANCE_DB", "finance.db")
+
+# Mercado Livre (OAuth) — app criado em developers.mercadolivre.com.br
+ML_CLIENT_ID = os.getenv("ML_CLIENT_ID", "")
+ML_CLIENT_SECRET = os.getenv("ML_CLIENT_SECRET", "")
+APP_BASE_URL = os.getenv("APP_BASE_URL", "").rstrip("/")  # ex.: https://meu-app.onrender.com

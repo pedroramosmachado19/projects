@@ -43,3 +43,47 @@ def test_app_requires_login_and_imports(tmp_path, monkeypatch):
     s = c.get("/api/summary?month=2026-11").json()
     assert s["spent"] == 85.0 and s["categories"][0]["category"] == "Alimentação"
     assert c.get("/manifest.webmanifest").status_code == 200            # público p/ instalar
+
+
+def _fake_ml(handler):
+    import httpx
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_mercadolivre_oauth_sync_and_match(tmp_path, monkeypatch):
+    import httpx
+    from app import config, mercadolivre as ml
+    monkeypatch.setattr(config, "ML_CLIENT_ID", "id"); monkeypatch.setattr(config, "ML_CLIENT_SECRET", "sec")
+    monkeypatch.setattr(config, "APP_BASE_URL", "https://x.test")
+    conn = db.connect(str(tmp_path / "m.db"))
+    conn.execute("INSERT INTO accounts(id,item_id) VALUES('a','i')")
+    from app.sync import store_transaction
+    # compra à vista + parcela 1/3 de outra, ambas na fatura como MERCADOLIVRE*
+    store_transaction(conn, "a", {"id": "t1", "date": "2026-11-02", "description": "MERCADOLIVRE*FONE",
+                                  "amount": 150.0, "type": "DEBIT"}, {})
+    store_transaction(conn, "a", {"id": "t2", "date": "2026-11-20", "description": "MERCADOLIVRE*SOFA 1/3",
+                                  "amount": 300.0, "type": "DEBIT"}, {})
+    def handler(req: httpx.Request):
+        p = req.url.path
+        if p == "/oauth/token":
+            return httpx.Response(200, json={"access_token": "A", "refresh_token": "R", "user_id": 42, "expires_in": 21600})
+        if p == "/orders/search":
+            assert req.headers["authorization"] == "Bearer A" and req.url.params["buyer"] == "42"
+            return httpx.Response(200, json={"paging": {"total": 2}, "results": [
+                {"id": 1, "status": "paid", "date_created": "2026-11-01T10:00:00.000-04:00", "paid_amount": 150.0,
+                 "order_items": [{"item": {"title": "Fone Bluetooth", "category_id": "MLB1"}}]},
+                {"id": 2, "status": "paid", "date_created": "2026-10-15T10:00:00.000-04:00", "paid_amount": 900.0,
+                 "order_items": [{"item": {"title": "Sofá 3 lugares", "category_id": "MLB2"}}]}]})
+        if p == "/categories/MLB1":
+            return httpx.Response(200, json={"path_from_root": [{"name": "Eletrônicos, Áudio e Vídeo"}]})
+        return httpx.Response(200, json={"path_from_root": [{"name": "Casa, Móveis e Decoração"}]})
+    http = _fake_ml(handler)
+    ml.connect(conn, "CODE", http)
+    assert ml.sync(conn, http) == {"orders": 2, "matched": 2}
+    rows = {r["id"]: (r["category"], r["category_source"]) for r in conn.execute("SELECT * FROM transactions")}
+    assert rows["t1"] == ("Eletrônicos", "ml") and rows["t2"] == ("Casa", "ml")
+    # re-sync do Pluggy não desfaz o enriquecimento
+    store_transaction(conn, "a", {"id": "t1", "date": "2026-11-02", "description": "MERCADOLIVRE*FONE",
+                                  "amount": 150.0, "type": "DEBIT"}, {})
+    d = conn.execute("SELECT category, description FROM transactions WHERE id='t1'").fetchone()
+    assert d["category"] == "Eletrônicos" and "Fone Bluetooth" in d["description"]

@@ -14,3 +14,9 @@ services:
         sync: false
       - key: PLUGGY_CLIENT_SECRET
         sync: false
+      - key: ML_CLIENT_ID
+        sync: false
+      - key: ML_CLIENT_SECRET
+        sync: false
+      - key: APP_BASE_URL    # ex.: https://assistente-financas.onrender.com (sem barra no fim)
+        sync: false

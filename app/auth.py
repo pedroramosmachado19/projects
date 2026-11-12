@@ -46,3 +46,15 @@ def check_password(password: str) -> bool:
     if not ok:
         _fails.append(time.time())
     return ok
+
+
+def make_state() -> str:
+    exp = str(int(time.time()) + 600)
+    return f"{exp}.{_sign('ml' + exp)}"
+
+
+def valid_state(state: str) -> bool:
+    if "." not in state:
+        return False
+    exp, sig = state.split(".", 1)
+    return exp.isdigit() and int(exp) > time.time() and hmac.compare_digest(sig, _sign("ml" + exp))

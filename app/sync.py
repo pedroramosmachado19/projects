@@ -21,11 +21,13 @@ def store_transaction(conn: sqlite3.Connection, account_id: str, tx: dict,
                                     category_source, raw_category)
            VALUES(?,?,?,?,?,?,?,?)
            ON CONFLICT(id) DO UPDATE SET
-             description = excluded.description, amount = excluded.amount, date = excluded.date,
-             category = CASE WHEN transactions.category_source = 'user'
+             amount = excluded.amount, date = excluded.date,
+             description = CASE WHEN transactions.category_source = 'ml'
+                             THEN transactions.description ELSE excluded.description END,
+             category = CASE WHEN transactions.category_source IN ('user','ml')
                              THEN transactions.category ELSE excluded.category END,
-             category_source = CASE WHEN transactions.category_source = 'user'
-                             THEN 'user' ELSE excluded.category_source END""",
+             category_source = CASE WHEN transactions.category_source IN ('user','ml')
+                             THEN transactions.category_source ELSE excluded.category_source END""",
         (tx["id"], account_id, tx["date"][:10], description, amount, category, source,
          tx.get("category")),
     )

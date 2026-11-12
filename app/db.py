@@ -38,6 +38,7 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(path or config.DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    conn.executescript(SCHEMA_ML)
     return conn
 
 
@@ -49,3 +50,17 @@ def session(path: str | None = None):
         conn.commit()
     finally:
         conn.close()
+
+SCHEMA_ML = """
+CREATE TABLE IF NOT EXISTS ml_auth (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    user_id TEXT, access_token TEXT, refresh_token TEXT, expires_at REAL
+);
+CREATE TABLE IF NOT EXISTS ml_orders (
+    id TEXT PRIMARY KEY, date TEXT, total REAL, title TEXT, category TEXT,
+    matched INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS ml_matches (
+    tx_id TEXT PRIMARY KEY, order_id TEXT NOT NULL
+);
+"""

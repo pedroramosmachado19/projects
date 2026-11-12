@@ -15,6 +15,14 @@ sistema aprende o estabelecimento.
 
 Local: `APP_PASSWORD=sua-senha uvicorn app.main:app` (ou `ALLOW_NO_AUTH=1` só em localhost).
 
+## Mercado Livre
+
+Crie um app em https://developers.mercadolivre.com.br/devcenter e cadastre como URI de
+redirecionamento `APP_BASE_URL/ml/callback`. Preencha `ML_CLIENT_ID`, `ML_CLIENT_SECRET`
+e `APP_BASE_URL`. As compras enriquecem as transações da fatura (categoria pelo produto);
+não viram transações novas, para não contar em dobro. Casamento por valor/data, até 12x.
+Mercado Pago (conta/cartão) entra pelo Pluggy.
+
 ## Rodando
 
 ```bash

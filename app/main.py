@@ -2,11 +2,12 @@ from pathlib import Path
 
 import os
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from . import auth, categorizer, config, db, importer
+from . import auth, categorizer, config, db, importer, mercadolivre
 from .pluggy import PluggyClient, PluggyError
 from .sync import sync_item
 
@@ -31,7 +32,7 @@ class RecategorizeIn(BaseModel):
     category: str
 
 
-PUBLIC = {"/login", "/manifest.webmanifest", "/sw.js", "/icon-192.png", "/icon-512.png"}
+PUBLIC = {"/ml/callback", "/login", "/manifest.webmanifest", "/sw.js", "/icon-192.png", "/icon-512.png"}
 
 if not auth.enabled() and os.getenv("ALLOW_NO_AUTH") != "1":
     raise RuntimeError("Defina APP_PASSWORD (ou ALLOW_NO_AUTH=1 só para uso local em localhost).")
@@ -96,7 +97,40 @@ def index():
 
 @app.get("/api/config")
 def get_config():
-    return {"pluggy": bool(config.PLUGGY_CLIENT_ID and config.PLUGGY_CLIENT_SECRET)}
+    with db.session() as conn:
+        ml_on = mercadolivre.connected(conn)
+    return {"pluggy": bool(config.PLUGGY_CLIENT_ID and config.PLUGGY_CLIENT_SECRET),
+            "ml_available": mercadolivre.configured(), "ml_connected": ml_on}
+
+
+@app.get("/api/ml/login")
+def ml_login():
+    if not mercadolivre.configured():
+        raise HTTPException(400, "Defina ML_CLIENT_ID, ML_CLIENT_SECRET e APP_BASE_URL")
+    return {"url": mercadolivre.authorize_url(auth.make_state())}
+
+
+@app.get("/ml/callback")
+def ml_callback(code: str = "", state: str = ""):
+    # Rota pública (o cookie SameSite=strict não vem do redirect); protegida pelo state assinado.
+    if not auth.valid_state(state) or not code:
+        raise HTTPException(400, "Retorno inválido")
+    try:
+        with db.session() as conn:
+            mercadolivre.connect(conn, code)
+            mercadolivre.sync(conn)
+    except (mercadolivre.MLError, httpx.HTTPError) as e:
+        raise HTTPException(502, str(e))
+    return RedirectResponse("/")
+
+
+@app.post("/api/ml/sync")
+def ml_sync():
+    try:
+        with db.session() as conn:
+            return mercadolivre.sync(conn)
+    except mercadolivre.MLError as e:
+        raise HTTPException(502, str(e))
 
 
 @app.post("/api/import")
@@ -177,7 +211,7 @@ def summary(month: str):
 
 @app.get("/api/categories")
 def categories():
-    return sorted(set(categorizer.BUILTIN_RULES) | {categorizer.DEFAULT})
+    return sorted(set(categorizer.BUILTIN_RULES) | set(mercadolivre.EXTRA_CATEGORIES) | {categorizer.DEFAULT})
 
 
 @app.patch("/api/transactions/{tx_id}")
