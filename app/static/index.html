@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Assistente de Finanças</title>
+<style>
+:root{--bg:#f6f5fa;--fg:#1c1b22;--card:#fff;--mut:#6b6877;--acc:#820ad1;--bd:#e5e3ee}
+@media(prefers-color-scheme:dark){:root{--bg:#141318;--fg:#eceaf3;--card:#1e1d25;--mut:#9a97a8;--bd:#2d2b38}}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+main{max-width:900px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+h1{font-size:20px;margin:8px 0}
+button,input,select{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg)}
+button.p{background:var(--acc);color:#fff;border-color:var(--acc);cursor:pointer}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
+.card small{color:var(--mut)}.card b{display:block;font-size:22px;margin-top:4px}
+.bar{display:grid;grid-template-columns:120px 1fr 100px;gap:8px;align-items:center;margin:6px 0;cursor:pointer}
+.bar i{display:block;height:12px;border-radius:6px;background:var(--acc)}
+.bar span:last-child{text-align:right}
+table{width:100%;border-collapse:collapse}td{padding:8px 4px;border-bottom:1px solid var(--bd)}
+td.n{text-align:right;white-space:nowrap}.neg{color:#c0392b}.pos{color:#1e8e5a}
+#msg{color:var(--mut);margin:8px 0}
+.wrap{overflow-x:auto}
+</style>
+</head>
+<body><main>
+<header>
+  <h1>💜 Assistente de Finanças</h1>
+  <div>
+    <input type="month" id="month">
+    <button class="p" id="connect">Conectar banco</button>
+    <button id="sync">Sincronizar</button>
+  </div>
+</header>
+<div id="msg"></div>
+<div class="cards">
+  <div class="card"><small>Gastos</small><b id="spent">–</b></div>
+  <div class="card"><small>Entradas</small><b id="income">–</b></div>
+  <div class="card"><small>Saldo do mês</small><b id="balance">–</b></div>
+</div>
+<div class="card"><h3 style="margin-top:0">Por categoria</h3><div id="cats"></div></div>
+<div class="card" style="margin-top:12px"><h3 style="margin-top:0">Transações <small id="filter"></small></h3>
+<div class="wrap"><table id="tx"></table></div></div>
+</main>
+<script src="https://cdn.pluggy.ai/pluggy-connect/v2.7.0/pluggy-connect.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const brl=v=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let category=null, categories=[];
+$('month').value=new Date().toISOString().slice(0,7);
+const msg=t=>$('msg').textContent=t||'';
+async function api(p,o){const r=await fetch(p,o);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.status);return r.json()}
+
+async function load(){
+  const m=$('month').value;
+  const s=await api('/api/summary?month='+m);
+  $('spent').textContent=brl(s.spent);$('income').textContent=brl(s.income);$('balance').textContent=brl(s.balance);
+  const max=Math.max(...s.categories.map(c=>c.spent),1);
+  $('cats').innerHTML=s.categories.map(c=>`<div class="bar" data-c="${esc(c.category)}"><span>${esc(c.category)}</span><span><i style="width:${c.spent/max*100}%"></i></span><span>${brl(c.spent)}</span></div>`).join('')||'<small>Sem dados neste mês.</small>';
+  document.querySelectorAll('.bar').forEach(b=>b.onclick=()=>{category=category===b.dataset.c?null:b.dataset.c;load()});
+  const tx=await api(`/api/transactions?month=${m}`+(category?`&category=${encodeURIComponent(category)}`:''));
+  $('filter').textContent=category?`· ${category} (clique na barra para limpar)`:'';
+  $('tx').innerHTML=tx.map(t=>`<tr><td>${t.date.slice(8)}/${t.date.slice(5,7)}</td><td>${esc(t.description)}<br><small style="color:var(--mut)">${esc(t.institution||'')}</small></td>
+  <td><select data-id="${esc(t.id)}">${categories.map(c=>`<option${c===t.category?' selected':''}>${esc(c)}</option>`).join('')}</select></td>
+  <td class="n ${t.amount<0?'neg':'pos'}">${brl(t.amount)}</td></tr>`).join('');
+  document.querySelectorAll('#tx select').forEach(s=>s.onchange=async()=>{
+    const r=await api('/api/transactions/'+s.dataset.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({category:s.value})});
+    msg(`Categoria salva. ${r.updated} transação(ões) parecida(s) atualizada(s).`);load()});
+}
+$('month').onchange=load;
+$('sync').onclick=async()=>{msg('Sincronizando…');try{const r=await api('/api/sync',{method:'POST'});msg(`${r.synced} transações sincronizadas.`);load()}catch(e){msg('Erro: '+e.message)}};
+$('connect').onclick=async()=>{
+  try{
+    const {accessToken}=await api('/api/connect-token',{method:'POST'});
+    new PluggyConnect({connectToken:accessToken,
+      onSuccess:async({item})=>{msg('Importando histórico…');const r=await api('/api/items',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item_id:item.id})});msg(`${r.synced} transações importadas.`);load()},
+      onError:e=>msg('Erro na conexão: '+(e.message||''))}).init();
+  }catch(e){msg('Erro: '+e.message)}
+};
+api('/api/categories').then(c=>{categories=c;load()}).catch(e=>msg(e.message));
+</script>
+</body></html>
