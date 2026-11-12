@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: assistente-financas
+    runtime: docker
+    plan: starter            # disco persistente exige plano pago; no free o banco é apagado
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: APP_PASSWORD
+        sync: false          # você digita no painel do Render, não fica no GitHub
+      - key: PLUGGY_CLIENT_ID
+        sync: false
+      - key: PLUGGY_CLIENT_SECRET
+        sync: false

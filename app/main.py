@@ -1,10 +1,12 @@
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+import os
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-from . import categorizer, db
+from . import auth, categorizer, config, db, importer
 from .pluggy import PluggyClient, PluggyError
 from .sync import sync_item
 
@@ -29,9 +31,86 @@ class RecategorizeIn(BaseModel):
     category: str
 
 
+PUBLIC = {"/login", "/manifest.webmanifest", "/sw.js", "/icon-192.png", "/icon-512.png"}
+
+if not auth.enabled() and os.getenv("ALLOW_NO_AUTH") != "1":
+    raise RuntimeError("Defina APP_PASSWORD (ou ALLOW_NO_AUTH=1 só para uso local em localhost).")
+
+
+@app.middleware("http")
+async def guard(request: Request, call_next):
+    path = request.url.path
+    if auth.enabled() and path not in PUBLIC and not auth.valid(request.cookies.get(auth.COOKIE)):
+        if path.startswith("/api"):
+            return JSONResponse({"detail": "Não autenticado"}, status_code=401)
+        return RedirectResponse("/login")
+    resp = await call_next(request)
+    resp.headers["Cache-Control"] = "no-store"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
+
+
+class LoginIn(BaseModel):
+    password: str
+
+
+@app.get("/login")
+def login_page():
+    return FileResponse(STATIC / "login.html")
+
+
+@app.post("/login")
+def login(body: LoginIn, request: Request):
+    if auth.locked():
+        raise HTTPException(429, "Muitas tentativas. Aguarde alguns minutos.")
+    if not auth.check_password(body.password):
+        raise HTTPException(401, "Senha incorreta")
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(auth.COOKIE, auth.make_token(), max_age=auth.MAX_AGE, httponly=True,
+                    samesite="strict", secure=request.url.scheme == "https"
+                    or request.headers.get("x-forwarded-proto") == "https")
+    return resp
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return FileResponse(STATIC / "manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/sw.js")
+def sw():
+    return FileResponse(STATIC / "sw.js", media_type="application/javascript")
+
+
+@app.get("/icon-{size}.png")
+def icon(size: int):
+    if size not in (192, 512):
+        raise HTTPException(404)
+    return FileResponse(STATIC / f"icon-{size}.png")
+
+
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/api/config")
+def get_config():
+    return {"pluggy": bool(config.PLUGGY_CLIENT_ID and config.PLUGGY_CLIENT_SECRET)}
+
+
+@app.post("/api/import")
+async def import_file(request: Request):
+    """Recebe o texto do CSV do Nubank (fatura ou extrato)."""
+    raw = await request.body()
+    if len(raw) > 5_000_000:
+        raise HTTPException(413, "Arquivo grande demais")
+    try:
+        with db.session() as conn:
+            n = importer.import_csv(conn, raw.decode("utf-8", errors="replace"))
+    except (importer.ImportError_, ValueError) as e:
+        raise HTTPException(400, str(e))
+    return {"imported": n}
 
 
 @app.post("/api/connect-token")

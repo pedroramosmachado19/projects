@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Assistente de Finanças</title>
+<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#820ad1">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <style>
 :root{--bg:#f6f5fa;--fg:#1c1b22;--card:#fff;--mut:#6b6877;--acc:#820ad1;--bd:#e5e3ee}
 @media(prefers-color-scheme:dark){:root{--bg:#141318;--fg:#eceaf3;--card:#1e1d25;--mut:#9a97a8;--bd:#2d2b38}}
@@ -15,10 +17,10 @@ button.p{background:var(--acc);color:#fff;border-color:var(--acc);cursor:pointer
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px}
 .card small{color:var(--mut)}.card b{display:block;font-size:22px;margin-top:4px}
-.bar{display:grid;grid-template-columns:120px 1fr 100px;gap:8px;align-items:center;margin:6px 0;cursor:pointer}
+.bar{display:grid;grid-template-columns:minmax(80px,120px) 1fr 90px;gap:8px;align-items:center;margin:6px 0;cursor:pointer}
 .bar i{display:block;height:12px;border-radius:6px;background:var(--acc)}
 .bar span:last-child{text-align:right}
-table{width:100%;border-collapse:collapse}td{padding:8px 4px;border-bottom:1px solid var(--bd)}
+table{width:100%;border-collapse:collapse}td{padding:10px 4px;border-bottom:1px solid var(--bd)}
 td.n{text-align:right;white-space:nowrap}.neg{color:#c0392b}.pos{color:#1e8e5a}
 #msg{color:var(--mut);margin:8px 0}
 .wrap{overflow-x:auto}
@@ -29,8 +31,10 @@ td.n{text-align:right;white-space:nowrap}.neg{color:#c0392b}.pos{color:#1e8e5a}
   <h1>💜 Assistente de Finanças</h1>
   <div>
     <input type="month" id="month">
-    <button class="p" id="connect">Conectar banco</button>
-    <button id="sync">Sincronizar</button>
+    <button class="p" id="import">Importar CSV</button>
+    <input type="file" id="file" accept=".csv,text/csv" hidden>
+    <button class="p" id="connect" hidden>Conectar banco</button>
+    <button id="sync" hidden>Sincronizar</button>
   </div>
 </header>
 <div id="msg"></div>
@@ -51,7 +55,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 let category=null, categories=[];
 $('month').value=new Date().toISOString().slice(0,7);
 const msg=t=>$('msg').textContent=t||'';
-async function api(p,o){const r=await fetch(p,o);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.status);return r.json()}
+async function api(p,o){const r=await fetch(p,o);if(r.status===401){location='/login';throw new Error('login')}if(!r.ok)throw new Error((await r.json().catch(()=>({}))).detail||r.status);return r.json()}
 
 async function load(){
   const m=$('month').value;
@@ -70,6 +74,11 @@ async function load(){
     msg(`Categoria salva. ${r.updated} transação(ões) parecida(s) atualizada(s).`);load()});
 }
 $('month').onchange=load;
+$('import').onclick=()=>$('file').click();
+$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;msg('Importando…');
+  try{const r=await api('/api/import',{method:'POST',headers:{'Content-Type':'text/plain'},body:await f.text()});msg(`${r.imported} transações importadas.`);load()}catch(x){msg('Erro: '+x.message)}e.target.value=''};
+api('/api/config').then(c=>{$('connect').hidden=!c.pluggy;$('sync').hidden=!c.pluggy});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
 $('sync').onclick=async()=>{msg('Sincronizando…');try{const r=await api('/api/sync',{method:'POST'});msg(`${r.synced} transações sincronizadas.`);load()}catch(e){msg('Erro: '+e.message)}};
 $('connect').onclick=async()=>{
   try{

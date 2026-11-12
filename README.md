@@ -4,6 +4,17 @@ Conecta Nubank e Mercado Pago/Mercado Livre via **Open Finance (Pluggy)**, impor
 as transações e categoriza tudo automaticamente. Você corrige uma categoria e o
 sistema aprende o estabelecimento.
 
+## Usar no celular (PWA)
+
+1. No Nubank: exporte o CSV da fatura ou do extrato e guarde no celular.
+2. Hospede o app (Dockerfile pronto; `render.yaml` para o Render) com as variáveis
+   `APP_PASSWORD` (obrigatória), e opcionalmente `PLUGGY_CLIENT_ID/SECRET`.
+   O banco precisa de disco persistente (`/data`), senão some a cada deploy.
+3. Abra a URL (HTTPS) no Chrome → menu → *Adicionar à tela inicial*.
+4. Toque em **Importar CSV**. Reimportar o mesmo arquivo não duplica.
+
+Local: `APP_PASSWORD=sua-senha uvicorn app.main:app` (ou `ALLOW_NO_AUTH=1` só em localhost).
+
 ## Rodando
 
 ```bash
