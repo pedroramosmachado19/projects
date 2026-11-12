@@ -1,4 +1,3 @@
-import sqlite3
 
 from . import categorizer
 from .pluggy import PluggyClient
@@ -10,7 +9,7 @@ def signed_amount(tx: dict) -> float:
     return -amount if tx.get("type") == "DEBIT" else amount
 
 
-def store_transaction(conn: sqlite3.Connection, account_id: str, tx: dict,
+def store_transaction(conn, account_id: str, tx: dict,
                       user_rules: dict[str, str]) -> None:
     amount = signed_amount(tx)
     description = tx.get("description") or tx.get("descriptionRaw") or "(sem descrição)"
@@ -33,7 +32,7 @@ def store_transaction(conn: sqlite3.Connection, account_id: str, tx: dict,
     )
 
 
-def sync_item(conn: sqlite3.Connection, client: PluggyClient, item_id: str,
+def sync_item(conn, client: PluggyClient, item_id: str,
               date_from: str | None = None) -> int:
     item = client.item(item_id)
     connector = (item.get("connector") or {}).get("name", "")

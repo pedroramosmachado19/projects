@@ -2,7 +2,6 @@
 import csv
 import hashlib
 import io
-import sqlite3
 import unicodedata
 from datetime import datetime
 
@@ -71,11 +70,12 @@ def parse(text: str) -> list[dict]:
     return out
 
 
-def import_csv(conn: sqlite3.Connection, text: str) -> int:
+def import_csv(conn, text: str) -> int:
     txs = parse(text)
-    conn.execute("INSERT OR IGNORE INTO items(id, connector) VALUES(?, 'Importação CSV')", (ITEM_ID,))
-    conn.execute("INSERT OR IGNORE INTO accounts(id, item_id, name, type, institution) "
-                 "VALUES(?,?,?,?,?)", (ACCOUNT_ID, ITEM_ID, "Nubank (CSV)", "BANK", "Nubank"))
+    conn.execute("INSERT INTO items(id, connector) VALUES(?, 'Importação CSV') "
+                 "ON CONFLICT(id) DO NOTHING", (ITEM_ID,))
+    conn.execute("INSERT INTO accounts(id, item_id, name, type, institution) "
+                 "VALUES(?,?,?,?,?) ON CONFLICT(id) DO NOTHING", (ACCOUNT_ID, ITEM_ID, "Nubank (CSV)", "BANK", "Nubank"))
     rules = categorizer.load_user_rules(conn)
     for tx in txs:
         store_transaction(conn, ACCOUNT_ID, tx, rules)

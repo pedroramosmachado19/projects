@@ -15,7 +15,20 @@ sistema aprende o estabelecimento.
 
 Local: `APP_PASSWORD=sua-senha uvicorn app.main:app` (ou `ALLOW_NO_AUTH=1` só em localhost).
 
-## Mercado Livre
+## Hospedar no Vercel (grátis) + Neon
+
+1. Vercel → *Add New → Project* → importe o repositório (branch desta feature ou a principal).
+2. Aba *Storage* do projeto → *Create Database* → **Neon (Postgres)**. Isso cria `DATABASE_URL` sozinho.
+3. *Settings → Environment Variables*: `APP_PASSWORD` (obrigatória), `PLUGGY_CLIENT_ID`,
+   `PLUGGY_CLIENT_SECRET`. Faça *Redeploy*.
+4. Abra a URL → adicionar à tela inicial → **Conectar banco** (Nubank e Mercado Pago, via Pluggy).
+
+Com `DATABASE_URL` o app usa Postgres; sem ela, usa SQLite local (`finance.db`).
+Testes em Postgres: `TEST_DATABASE_URL=postgresql://... pytest`.
+
+## Mercado Livre (opcional, só se configurar as chaves)
+
+(Para Mercado **Pago** não precisa disto: ele entra pelo Pluggy.)
 
 Crie um app em https://developers.mercadolivre.com.br/devcenter e cadastre como URI de
 redirecionamento `APP_BASE_URL/ml/callback`. Preencha `ML_CLIENT_ID`, `ML_CLIENT_SECRET`
@@ -26,7 +39,7 @@ Mercado Pago (conta/cartão) entra pelo Pluggy.
 ## Rodando
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env      # preencha PLUGGY_CLIENT_ID / PLUGGY_CLIENT_SECRET
 uvicorn app.main:app --reload
 # abra http://localhost:8000 e clique em "Conectar banco"

@@ -4,7 +4,6 @@ Prioridade: regra do usuário (aprendida) > regras embutidas > categoria do
 provedor (Pluggy) > "Outros".
 """
 import re
-import sqlite3
 import unicodedata
 
 DEFAULT = "Outros"
@@ -61,7 +60,7 @@ def merchant_key(description: str) -> str:
     return re.sub(r"\s+", " ", key).strip()
 
 
-def load_user_rules(conn: sqlite3.Connection) -> dict[str, str]:
+def load_user_rules(conn) -> dict[str, str]:
     return {r["keyword"]: r["category"] for r in conn.execute("SELECT keyword, category FROM user_rules")}
 
 
@@ -98,7 +97,7 @@ def categorize(
     return DEFAULT, "default"
 
 
-def learn(conn: sqlite3.Connection, description: str, category: str) -> int:
+def learn(conn, description: str, category: str) -> int:
     """Guarda uma regra e recategoriza transações parecidas. Retorna quantas mudaram."""
     key = merchant_key(description)
     if not key:
